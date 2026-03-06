@@ -17,20 +17,19 @@ import java.util.concurrent.TimeUnit;
  * GeminiClient — Gọi Google Gemini API trực tiếp qua REST (OkHttp).
  *
  * Hỗ trợ 2 model:
- *   - gemini-2.0-flash  (nhanh, rẻ — khuyên dùng)
- *   - gemini-1.5-pro    (thông minh hơn, chậm hơn)
+ * - gemini-2.0-flash (nhanh, rẻ — khuyên dùng)
+ * - gemini-1.5-pro (thông minh hơn, chậm hơn)
  *
  * API key: https://aistudio.google.com/app/apikey (FREE tier có sẵn)
  *
  * Cách dùng:
- *   export GEMINI_API_KEY=AIzaSy...
+ * export GEMINI_API_KEY=AIzaSy...
  */
 @Slf4j
 @Component
 public class GeminiClient {
 
-    private static final String BASE_URL =
-            "https://generativelanguage.googleapis.com/v1beta/models/";
+    private static final String BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/";
 
     private final String apiKey;
     private final String model;
@@ -40,10 +39,9 @@ public class GeminiClient {
     public GeminiClient(
             @Value("${gemini.api-key}") String apiKey,
             @Value("${gemini.model:gemini-2.0-flash}") String model,
-            ObjectMapper objectMapper
-    ) {
+            ObjectMapper objectMapper) {
         this.apiKey = apiKey;
-        this.model  = model;
+        this.model = model;
         this.objectMapper = objectMapper;
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -55,9 +53,9 @@ public class GeminiClient {
     /**
      * Gọi Gemini với danh sách tin nhắn (system + user + assistant xen kẽ).
      *
-     * @param systemPrompt  Prompt hệ thống (role của agent)
-     * @param messages      Lịch sử hội thoại: [{"role":"user/model","text":"..."}]
-     * @return              Text response từ Gemini
+     * @param systemPrompt Prompt hệ thống (role của agent)
+     * @param messages     Lịch sử hội thoại: [{"role":"user/model","text":"..."}]
+     * @return Text response từ Gemini
      */
     public String chat(String systemPrompt, List<ChatMessage> messages) {
         String url = BASE_URL + model + ":generateContent?key=" + apiKey;
@@ -97,7 +95,8 @@ public class GeminiClient {
 
             try (Response response = httpClient.newCall(request).execute()) {
                 String responseBody = response.body() != null
-                        ? response.body().string() : "";
+                        ? response.body().string()
+                        : "";
 
                 if (!response.isSuccessful()) {
                     log.error("Gemini API error {}: {}", response.code(), responseBody);
@@ -128,31 +127,36 @@ public class GeminiClient {
         }
 
         // Parse response text
-        JsonNode text = root
+        JsonNode parts = root
                 .path("candidates").get(0)
                 .path("content")
-                .path("parts").get(0)
-                .path("text");
+                .path("parts");
 
-        if (text.isMissingNode()) {
-            // Kiểm tra finishReason để thông báo rõ
-            String finishReason = root
-                    .path("candidates").get(0)
-                    .path("finishReason").asText("");
-            if ("SAFETY".equals(finishReason)) {
-                return "Final Answer: Nội dung bị chặn bởi safety filter. Vui lòng thử lại.";
+        if (parts.isArray() && parts.size() > 0) {
+            JsonNode firstPart = parts.get(0);
+            if (firstPart.has("text")) {
+                return firstPart.path("text").asText();
+            } else if (firstPart.has("functionCall")) {
+                // Trả về dạng JSON string của functionCall để BaseReActAgent xử lý
+                return objectMapper.writeValueAsString(firstPart);
             }
-            throw new GeminiException("Không parse được response: " + responseBody);
         }
 
-        return text.asText();
+        // Kiểm tra finishReason để thông báo rõ
+        String finishReason = root
+                .path("candidates").get(0)
+                .path("finishReason").asText("");
+        if ("SAFETY".equals(finishReason)) {
+            return "Final Answer: Nội dung bị chặn bởi safety filter. Vui lòng thử lại.";
+        }
+        throw new GeminiException("Không parse được response hoặc không có nội dung: " + responseBody);
     }
 
     private void handleHttpError(int code, String body) {
         switch (code) {
             case 400 -> throw new GeminiException("Request không hợp lệ (400): " + body);
             case 401, 403 -> throw new GeminiException(
-                    "API key không hợp lệ hoặc không có quyền ("+code+"). " +
+                    "API key không hợp lệ hoặc không có quyền (" + code + "). " +
                             "Kiểm tra GEMINI_API_KEY tại https://aistudio.google.com/app/apikey");
             case 429 -> throw new GeminiException(
                     "Vượt quá rate limit (429). " +
@@ -170,6 +174,7 @@ public class GeminiClient {
         public static ChatMessage user(String text) {
             return new ChatMessage("user", text);
         }
+
         /** Tạo tin nhắn từ model (assistant) */
         public static ChatMessage model(String text) {
             return new ChatMessage("model", text);
@@ -178,6 +183,8 @@ public class GeminiClient {
 
     // ── Custom exception ──────────────────────────────────────────
     public static class GeminiException extends RuntimeException {
-        public GeminiException(String message) { super(message); }
+        public GeminiException(String message) {
+            super(message);
+        }
     }
 }
