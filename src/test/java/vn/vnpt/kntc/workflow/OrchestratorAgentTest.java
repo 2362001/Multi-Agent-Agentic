@@ -23,10 +23,14 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class OrchestratorAgentTest {
 
-    @Mock private ChatClient chatClient;
-    @Mock private ChatClient.CallResponseSpec responseSpec;
-    @Mock private Generation generation;
-    @Mock private SynthesisAgent synthesisAgent;
+    @Mock
+    private ChatClient chatClient;
+    @Mock
+    private ChatResponse chatResponse;
+    @Mock
+    private Generation generation;
+    @Mock
+    private SynthesisAgent synthesisAgent;
 
     @Test
     void run_singleDomainQuery_shouldRouteToOneAgent() throws Exception {
@@ -34,39 +38,37 @@ class OrchestratorAgentTest {
         BaseReActAgent mockHoSoAgent = mock(BaseReActAgent.class);
         when(mockHoSoAgent.getAgentId()).thenReturn("HO_SO_AGENT");
         when(mockHoSoAgent.run(any(), any())).thenReturn(
-            AgentResult.success("HO_SO_AGENT", "Hồ sơ",
-                "Bạn có 2 hồ sơ gấp", List.of(), List.of())
-        );
+                AgentResult.success("HO_SO_AGENT", "Hồ sơ",
+                        "Bạn có 2 hồ sơ gấp", List.of(), List.of()));
 
         // Orchestrator plan JSON
         String planJson = """
-            {
-                "understanding": "Câu hỏi về hồ sơ gấp",
-                "tasks": [
-                    {
-                        "agentId": "HO_SO_AGENT",
-                        "task": "Tìm hồ sơ gấp của user 123",
-                        "canParallel": true,
-                        "dependsOn": [],
-                        "priority": 1
-                    }
-                ],
-                "synthesisInstruction": "Trả lời trực tiếp"
-            }
-            """;
+                {
+                    "understanding": "Câu hỏi về hồ sơ gấp",
+                    "tasks": [
+                        {
+                            "agentId": "HO_SO_AGENT",
+                            "task": "Tìm hồ sơ gấp của user 123",
+                            "canParallel": true,
+                            "dependsOn": [],
+                            "priority": 1
+                        }
+                    ],
+                    "synthesisInstruction": "Trả lời trực tiếp"
+                }
+                """;
 
-        when(chatClient.call(any(Prompt.class))).thenReturn(responseSpec);
-        when(responseSpec.getResult()).thenReturn(generation);
+        when(chatClient.call(any(Prompt.class))).thenReturn(chatResponse);
+        when(chatResponse.getResult()).thenReturn(generation);
         when(generation.getOutput()).thenReturn(new AssistantMessage(planJson));
         when(synthesisAgent.synthesize(any(), any(), any()))
-            .thenReturn("Bạn có 2 hồ sơ gấp");
+                .thenReturn("Bạn có 2 hồ sơ gấp");
 
         ObjectMapper objectMapper = new ObjectMapper();
         OrchestratorAgent orchestrator = new OrchestratorAgent(
-            chatClient, objectMapper,
-            List.of(mockHoSoAgent),
-            synthesisAgent
-        );
+                chatClient, objectMapper,
+                List.of(mockHoSoAgent),
+                synthesisAgent);
 
         String result = orchestrator.run("Hồ sơ gấp của tôi?", 123, "Test User");
 
@@ -83,41 +85,37 @@ class OrchestratorAgentTest {
         when(mockLichAgent.getAgentId()).thenReturn("LICH_AGENT");
 
         when(mockHoSoAgent.run(any(), any())).thenReturn(
-            AgentResult.success("HO_SO_AGENT", "Hồ sơ", "2 hồ sơ gấp",
-                List.of(), List.of())
-        );
+                AgentResult.success("HO_SO_AGENT", "Hồ sơ", "2 hồ sơ gấp",
+                        List.of(), List.of()));
         when(mockLichAgent.run(any(), any())).thenReturn(
-            AgentResult.success("LICH_AGENT", "Lịch", "1 cuộc họp lúc 9h",
-                List.of(), List.of())
-        );
+                AgentResult.success("LICH_AGENT", "Lịch", "1 cuộc họp lúc 9h",
+                        List.of(), List.of()));
 
         String planJson = """
-            {
-                "understanding": "Câu hỏi về lịch và hồ sơ hôm nay",
-                "tasks": [
-                    {"agentId":"HO_SO_AGENT","task":"Hồ sơ hôm nay","canParallel":true,"dependsOn":[],"priority":1},
-                    {"agentId":"LICH_AGENT","task":"Lịch hôm nay","canParallel":true,"dependsOn":[],"priority":1}
-                ],
-                "synthesisInstruction": "Tổng hợp kế hoạch ngày"
-            }
-            """;
+                {
+                    "understanding": "Câu hỏi về lịch và hồ sơ hôm nay",
+                    "tasks": [
+                        {"agentId":"HO_SO_AGENT","task":"Hồ sơ hôm nay","canParallel":true,"dependsOn":[],"priority":1},
+                        {"agentId":"LICH_AGENT","task":"Lịch hôm nay","canParallel":true,"dependsOn":[],"priority":1}
+                    ],
+                    "synthesisInstruction": "Tổng hợp kế hoạch ngày"
+                }
+                """;
 
-        when(chatClient.call(any(Prompt.class))).thenReturn(responseSpec);
-        when(responseSpec.getResult()).thenReturn(generation);
+        when(chatClient.call(any(Prompt.class))).thenReturn(chatResponse);
+        when(chatResponse.getResult()).thenReturn(generation);
         when(generation.getOutput()).thenReturn(new AssistantMessage(planJson));
         when(synthesisAgent.synthesize(any(), any(), any()))
-            .thenReturn("Hôm nay bạn bận: 2 hồ sơ + 1 cuộc họp");
+                .thenReturn("Hôm nay bạn bận: 2 hồ sơ + 1 cuộc họp");
 
         ObjectMapper objectMapper = new ObjectMapper();
         OrchestratorAgent orchestrator = new OrchestratorAgent(
-            chatClient, objectMapper,
-            List.of(mockHoSoAgent, mockLichAgent),
-            synthesisAgent
-        );
+                chatClient, objectMapper,
+                List.of(mockHoSoAgent, mockLichAgent),
+                synthesisAgent);
 
         String result = orchestrator.run(
-            "Hôm nay tôi có hồ sơ gấp và lịch họp gì?", 123, "Test"
-        );
+                "Hôm nay tôi có hồ sơ gấp và lịch họp gì?", 123, "Test");
 
         assertThat(result).isNotBlank();
         verify(mockHoSoAgent).run(any(), any());
