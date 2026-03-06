@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.ChatClient;
 import org.springframework.stereotype.Component;
 import vn.vnpt.kntc.agent.base.BaseReActAgent;
+import vn.vnpt.kntc.config.GeminiClient;
 import vn.vnpt.kntc.repository.ThongBaoRepository;
 
 /**
@@ -18,7 +19,7 @@ public class ThongBaoAgent extends BaseReActAgent {
 
     private final ThongBaoRepository tbRepo;
 
-    public ThongBaoAgent(ChatClient chatClient, ObjectMapper objectMapper,
+    public ThongBaoAgent(GeminiClient chatClient, ObjectMapper objectMapper,
                          ThongBaoRepository tbRepo) {
         super(chatClient, objectMapper);
         this.tbRepo = tbRepo;

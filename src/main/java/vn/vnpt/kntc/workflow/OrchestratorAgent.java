@@ -2,15 +2,13 @@ package vn.vnpt.kntc.workflow;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.ChatClient;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import vn.vnpt.kntc.agent.base.AgentContext;
 import vn.vnpt.kntc.agent.base.AgentResult;
 import vn.vnpt.kntc.agent.base.BaseReActAgent;
+import vn.vnpt.kntc.config.GeminiClient;
+import vn.vnpt.kntc.config.GeminiClient.ChatMessage;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -29,7 +27,8 @@ import java.util.stream.Collectors;
 @Component
 public class OrchestratorAgent {
 
-    private final ChatClient chatClient;
+    // ✅ Thay ChatClient → GeminiClient
+    private final GeminiClient geminiClient;
     private final ObjectMapper objectMapper;
     private final Map<String, BaseReActAgent> agentRegistry;
     private final SynthesisAgent synthesisAgent;
@@ -80,21 +79,20 @@ public class OrchestratorAgent {
         - Chỉ dùng đúng agentId đã liệt kê ở trên
         - task phải mô tả cụ thể, kèm userId nếu biết
         - synthesisInstruction hướng dẫn cách trình bày kết quả cuối
+        - Trả về JSON thuần túy, KHÔNG bọc trong ```json``` hay bất kỳ markdown nào
         """;
 
-    public OrchestratorAgent(ChatClient chatClient,
-                              ObjectMapper objectMapper,
-                              List<BaseReActAgent> agents,
-                              SynthesisAgent synthesisAgent) {
-        this.chatClient = chatClient;
-        this.objectMapper = objectMapper;
+    // ✅ Thay ChatClient → GeminiClient trong constructor
+    public OrchestratorAgent(GeminiClient geminiClient,
+                             ObjectMapper objectMapper,
+                             List<BaseReActAgent> agents,
+                             SynthesisAgent synthesisAgent) {
+        this.geminiClient   = geminiClient;
+        this.objectMapper   = objectMapper;
         this.synthesisAgent = synthesisAgent;
         // Tự động đăng ký tất cả agents vào registry
-        this.agentRegistry = agents.stream()
-            .collect(Collectors.toMap(
-                BaseReActAgent::getAgentId,
-                a -> a
-            ));
+        this.agentRegistry  = agents.stream()
+                .collect(Collectors.toMap(BaseReActAgent::getAgentId, a -> a));
         log.info("AgentRegistry: {}", agentRegistry.keySet());
     }
 
@@ -109,14 +107,14 @@ public class OrchestratorAgent {
         // Bước 1: Lên kế hoạch
         OrchestrationPlan plan = buildPlan(query, userId);
         log.info("Kế hoạch: {} | tasks={}",
-            plan.getUnderstanding(), plan.getTasks().size());
+                plan.getUnderstanding(), plan.getTasks().size());
 
-        // Bước 2: Thực thi theo topology (xử lý dependency)
+        // Bước 2: Thực thi theo topology
         List<AgentResult> results = executeWithTopology(plan, userId, userName);
 
         // Bước 3: Tổng hợp
         String finalAnswer = synthesisAgent.synthesize(
-            query, results, plan.getSynthesisInstruction()
+                query, results, plan.getSynthesisInstruction()
         );
 
         log.info("══════════════════════════════════════");
@@ -128,25 +126,25 @@ public class OrchestratorAgent {
 
     private OrchestrationPlan buildPlan(String query, Integer userId) {
         try {
-            String llmResponse = chatClient.call(new Prompt(List.of(
-                new SystemMessage(ORCHESTRATOR_PROMPT),
-                new UserMessage(
-                    "userId: " + userId + "\n" +
-                    "Thời gian: " + LocalDateTime.now() + "\n" +
-                    "Câu hỏi: " + query
-                )
-            ))).getResult().getOutput().getContent();
+            String llmResponse = geminiClient.chat(
+                    ORCHESTRATOR_PROMPT,
+                    List.of(ChatMessage.user(
+                            "userId: " + userId + "\n" +
+                                    "Thời gian: " + LocalDateTime.now() + "\n" +
+                                    "Câu hỏi: " + query
+                    ))
+            );
 
-            // Làm sạch JSON (loại bỏ markdown nếu LLM thêm vào)
+            // Làm sạch JSON (Gemini đôi khi vẫn wrap trong ```json```)
             String json = llmResponse.trim()
-                .replaceAll("```json\\s*", "")
-                .replaceAll("```\\s*", "")
-                .trim();
+                    .replaceAll("```json\\s*", "")
+                    .replaceAll("```\\s*", "")
+                    .trim();
 
             return objectMapper.readValue(json, OrchestrationPlan.class);
 
         } catch (Exception e) {
-            log.error("Lỗi build plan, dùng fallback HO_SO_AGENT", e);
+            log.error("Lỗi build plan, dùng fallback HO_SO_AGENT: {}", e.getMessage());
             return fallbackPlan(query);
         }
     }
@@ -158,16 +156,16 @@ public class OrchestratorAgent {
 
         Map<String, AgentResult> resultMap = new LinkedHashMap<>();
 
-        // Topo sort: nhóm tasks theo wave (wave = tasks có thể chạy cùng lúc)
         List<List<OrchestrationPlan.AgentTask>> waves =
-            topologicalSort(plan.getTasks());
+                topologicalSort(plan.getTasks());
 
         for (int i = 0; i < waves.size(); i++) {
             List<OrchestrationPlan.AgentTask> wave = waves.get(i);
             log.info("Wave {}/{}: agents={}", i + 1, waves.size(),
-                wave.stream().map(OrchestrationPlan.AgentTask::getAgentId).toList());
+                    wave.stream().map(OrchestrationPlan.AgentTask::getAgentId).toList());
 
-            List<AgentResult> waveResults = executeWave(wave, userId, userName, resultMap);
+            List<AgentResult> waveResults =
+                    executeWave(wave, userId, userName, resultMap);
             waveResults.forEach(r -> resultMap.put(r.getAgentId(), r));
         }
 
@@ -180,19 +178,18 @@ public class OrchestratorAgent {
             Map<String, AgentResult> previousResultMap) {
 
         if (wave.size() == 1) {
-            // Chỉ 1 task → chạy trực tiếp
             return List.of(runTask(wave.get(0), userId, userName,
-                new ArrayList<>(previousResultMap.values())));
+                    new ArrayList<>(previousResultMap.values())));
         }
 
         // Nhiều tasks → chạy song song
         ExecutorService executor = Executors.newFixedThreadPool(wave.size());
         List<Future<AgentResult>> futures = wave.stream()
-            .map(task -> executor.submit(() ->
-                runTask(task, userId, userName,
-                    new ArrayList<>(previousResultMap.values()))
-            ))
-            .toList();
+                .map(task -> executor.submit(() ->
+                        runTask(task, userId, userName,
+                                new ArrayList<>(previousResultMap.values()))
+                ))
+                .toList();
 
         List<AgentResult> results = new ArrayList<>();
         for (Future<AgentResult> future : futures) {
@@ -202,7 +199,7 @@ public class OrchestratorAgent {
                 log.error("Task timeout sau {}s", parallelTimeoutSec);
                 results.add(AgentResult.failed("UNKNOWN", "UNKNOWN", "Timeout"));
             } catch (Exception e) {
-                log.error("Task thất bại", e);
+                log.error("Task thất bại: {}", e.getMessage());
                 results.add(AgentResult.failed("UNKNOWN", "UNKNOWN", e.getMessage()));
             }
         }
@@ -211,31 +208,26 @@ public class OrchestratorAgent {
     }
 
     private AgentResult runTask(OrchestrationPlan.AgentTask task,
-                                 Integer userId, String userName,
-                                 List<AgentResult> previousResults) {
+                                Integer userId, String userName,
+                                List<AgentResult> previousResults) {
         BaseReActAgent agent = agentRegistry.get(task.getAgentId());
         if (agent == null) {
             log.error("Agent không tồn tại: {}", task.getAgentId());
             return AgentResult.failed(task.getAgentId(), "UNKNOWN",
-                "Agent không tồn tại: " + task.getAgentId());
+                    "Agent không tồn tại: " + task.getAgentId());
         }
 
         AgentContext context = AgentContext.builder()
-            .userId(userId)
-            .userName(userName)
-            .previousResults(previousResults)
-            .build();
+                .userId(userId)
+                .userName(userName)
+                .previousResults(previousResults)
+                .build();
 
         return agent.run(task.getTask(), context);
     }
 
     // ── Private: Topological Sort ─────────────────────────────────
 
-    /**
-     * Chia tasks thành các waves.
-     * Tasks trong cùng wave không phụ thuộc nhau → chạy song song.
-     * Tasks ở wave sau phụ thuộc wave trước → chạy tuần tự.
-     */
     private List<List<OrchestrationPlan.AgentTask>> topologicalSort(
             List<OrchestrationPlan.AgentTask> tasks) {
 
@@ -244,10 +236,9 @@ public class OrchestratorAgent {
         List<OrchestrationPlan.AgentTask> remaining = new ArrayList<>(tasks);
 
         while (!remaining.isEmpty()) {
-            // Lấy tasks có thể chạy (dependencies đã hoàn thành)
             List<OrchestrationPlan.AgentTask> wave = remaining.stream()
-                .filter(t -> completed.containsAll(t.getDependsOn()))
-                .toList();
+                    .filter(t -> completed.containsAll(t.getDependsOn()))
+                    .toList();
 
             if (wave.isEmpty()) {
                 log.warn("Circular dependency detected, chạy tất cả còn lại");
@@ -267,17 +258,17 @@ public class OrchestratorAgent {
 
     private OrchestrationPlan fallbackPlan(String query) {
         return OrchestrationPlan.builder()
-            .understanding("Câu hỏi về hồ sơ KNTC")
-            .tasks(List.of(
-                OrchestrationPlan.AgentTask.builder()
-                    .agentId("HO_SO_AGENT")
-                    .task(query)
-                    .canParallel(true)
-                    .dependsOn(new ArrayList<>())
-                    .priority(1)
-                    .build()
-            ))
-            .synthesisInstruction("Trả lời trực tiếp câu hỏi về hồ sơ")
-            .build();
+                .understanding("Câu hỏi về hồ sơ KNTC")
+                .tasks(List.of(
+                        OrchestrationPlan.AgentTask.builder()
+                                .agentId("HO_SO_AGENT")
+                                .task(query)
+                                .canParallel(true)
+                                .dependsOn(new ArrayList<>())
+                                .priority(1)
+                                .build()
+                ))
+                .synthesisInstruction("Trả lời trực tiếp câu hỏi về hồ sơ")
+                .build();
     }
 }

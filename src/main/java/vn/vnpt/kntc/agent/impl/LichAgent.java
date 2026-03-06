@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.ChatClient;
 import org.springframework.stereotype.Component;
 import vn.vnpt.kntc.agent.base.BaseReActAgent;
+import vn.vnpt.kntc.config.GeminiClient;
 import vn.vnpt.kntc.repository.LichHopRepository;
 
 import java.time.LocalDateTime;
@@ -20,7 +21,7 @@ public class LichAgent extends BaseReActAgent {
 
     private final LichHopRepository lichRepo;
 
-    public LichAgent(ChatClient chatClient, ObjectMapper objectMapper,
+    public LichAgent(GeminiClient chatClient, ObjectMapper objectMapper,
                      LichHopRepository lichRepo) {
         super(chatClient, objectMapper);
         this.lichRepo = lichRepo;

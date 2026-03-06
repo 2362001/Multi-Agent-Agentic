@@ -30,6 +30,11 @@ spring:
 server:
   port: 8080
 
+# ── Google Gemini ────────────────────────────────────
+gemini:
+  api-key: AIzaSyBxQkP1CqVG2huTIUQeKfTW3ivSU8B3TB0          # Lấy tại: https://aistudio.google.com/app/apikey
+  model: gemini-3-flash-preview             # Hoặc: gemini-1.5-pro (thông minh hơn, chậm hơn)
+
 # ── Agent Configuration ─────────────────────────────
 agent:
   max-steps: 8               # Số bước tối đa mỗi ReAct loop

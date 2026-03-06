@@ -2,23 +2,18 @@ package vn.vnpt.kntc.agent.base;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.ChatClient;
-import org.springframework.ai.chat.messages.AssistantMessage;
-import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.prompt.Prompt;
+import vn.vnpt.kntc.config.GeminiClient;
+import vn.vnpt.kntc.config.GeminiClient.ChatMessage;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Base class cho mọi Sub-Agent trong hệ thống KNTC.
+ * Base class cho mọi Sub-Agent — dùng Google Gemini thay vì OpenAI.
  *
- * Implement ReAct pattern:
- *   Thought → Action → Observation → Thought → ... → Final Answer
+ * ReAct loop: Thought → Action → Observation → Thought → ... → Final Answer
  *
  * Subclass chỉ cần implement:
  *   - getAgentId()
@@ -27,13 +22,17 @@ import java.util.List;
  *   - executeTool(toolName, args)
  */
 @Slf4j
-@RequiredArgsConstructor
 public abstract class BaseReActAgent {
 
-    protected final ChatClient chatClient;
+    protected final GeminiClient geminiClient;
     protected final ObjectMapper objectMapper;
 
     private static final int MAX_STEPS = 8;
+
+    protected BaseReActAgent(GeminiClient geminiClient, ObjectMapper objectMapper) {
+        this.geminiClient = geminiClient;
+        this.objectMapper = objectMapper;
+    }
 
     // ── Abstract methods — subclass bắt buộc implement ───────────
     public abstract String getAgentId();
@@ -47,65 +46,62 @@ public abstract class BaseReActAgent {
     public AgentResult run(String task, AgentContext context) {
         log.info("▶ {} | task: {}", getAgentId(), task);
 
-        List<Message> messages = new ArrayList<>();
-        messages.add(new SystemMessage(buildSystemPrompt()));
-        messages.add(new UserMessage(buildUserMessage(task, context)));
+        // Gemini dùng roles "user" và "model" xen kẽ, bắt đầu = user
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(ChatMessage.user(buildUserMessage(task, context)));
 
         List<String> thoughtProcess = new ArrayList<>();
-        List<String> toolsUsed = new ArrayList<>();
+        List<String> toolsUsed     = new ArrayList<>();
 
         for (int step = 1; step <= MAX_STEPS; step++) {
-            log.debug("{} step {}", getAgentId(), step);
+            log.debug("{} step {}/{}", getAgentId(), step, MAX_STEPS);
 
-            // ── LLM quyết định làm gì tiếp theo ─────────────────
-            String llmOutput = callLLM(messages);
-            messages.add(new AssistantMessage(llmOutput));
+            String llmOutput = callGemini(messages);
+            messages.add(ChatMessage.model(llmOutput));
             thoughtProcess.add(llmOutput);
 
-            // ── Có Final Answer → dừng ───────────────────────────
+            // Có Final Answer → dừng
             if (llmOutput.contains("Final Answer:")) {
                 String answer = extractAfter(llmOutput, "Final Answer:").trim();
-                log.info("✅ {} hoàn thành sau {} bước | tools: {}",
-                    getAgentId(), step, toolsUsed);
-                return AgentResult.success(
-                    getAgentId(), getDomain(),
-                    answer, thoughtProcess, toolsUsed
-                );
+                log.info("✅ {} done after {} steps | tools: {}", getAgentId(), step, toolsUsed);
+                return AgentResult.success(getAgentId(), getDomain(),
+                        answer, thoughtProcess, toolsUsed);
             }
 
-            // ── LLM muốn gọi tool ────────────────────────────────
+            // LLM muốn gọi tool
             if (llmOutput.contains("Action:")) {
-                String toolName = extractToolName(llmOutput);
-                JsonNode toolArgs = extractToolArgs(llmOutput);
+                String toolName   = extractToolName(llmOutput);
+                JsonNode toolArgs = extractToolArgs(llmOutput, context.getUserId());
 
-                log.info("{} → tool: {} | args: {}", getAgentId(), toolName, toolArgs);
+                log.info("{} → tool: {} args: {}", getAgentId(), toolName, toolArgs);
                 toolsUsed.add(toolName);
 
                 String observation = executeTool(toolName, toolArgs);
-                log.debug("Observation: {}", observation);
+                log.debug("{} Observation: {}", getAgentId(), observation);
 
-                messages.add(new UserMessage("Observation: " + observation));
-
-            } else {
-                // LLM không có action cụ thể → có thể đang suy nghĩ
-                log.debug("{} thinking... no action yet", getAgentId());
+                // Observation gửi lại là user message (Gemini cần xen kẽ user/model)
+                messages.add(ChatMessage.user("Observation: " + observation));
             }
         }
 
-        log.warn("⚠ {} vượt quá MAX_STEPS={}", getAgentId(), MAX_STEPS);
-        return AgentResult.failed(getAgentId(), getDomain(),
-            "Vượt quá " + MAX_STEPS + " bước xử lý");
+        log.warn("⚠ {} exceeded MAX_STEPS={}", getAgentId(), MAX_STEPS);
+        return AgentResult.failed(getAgentId(), getDomain(), "Vượt quá " + MAX_STEPS + " bước");
     }
 
-    // ── Helpers ──────────────────────────────────────────────────
-
-    private String callLLM(List<Message> messages) {
+    // ─────────────────────────────────────────────────────────────
+    private String callGemini(List<ChatMessage> messages) {
         try {
-            return chatClient.call(new Prompt(messages))
-                .getResult().getOutput().getContent();
-        } catch (Exception e) {
-            log.error("{} LLM call failed", getAgentId(), e);
+            return geminiClient.chat(buildSystemPrompt(), messages);
+        } catch (GeminiClient.GeminiException e) {
+            log.error("❌ {} Gemini lỗi: {}", getAgentId(), e.getMessage());
+            if (e.getMessage().contains("429"))
+                return "Final Answer: Hệ thống bận (rate limit). Thử lại sau 1 phút.";
+            if (e.getMessage().contains("API key") || e.getMessage().contains("401") || e.getMessage().contains("403"))
+                return "Final Answer: Cấu hình Gemini API key không hợp lệ. Liên hệ admin.";
             return "Final Answer: Lỗi kết nối AI: " + e.getMessage();
+        } catch (Exception e) {
+            log.error("❌ {} Unexpected: {}", getAgentId(), e.getMessage());
+            return "Final Answer: Lỗi hệ thống: " + e.getMessage();
         }
     }
 
@@ -113,42 +109,51 @@ public abstract class BaseReActAgent {
         StringBuilder sb = new StringBuilder();
         sb.append("userId: ").append(context.getUserId()).append("\n");
         sb.append("userName: ").append(context.getUserName()).append("\n");
-        sb.append("Thời gian hiện tại: ").append(context.getCurrentTime()).append("\n");
+        sb.append("Thời gian: ").append(context.getCurrentTime()).append("\n");
         sb.append("Nhiệm vụ: ").append(task);
-
         if (!context.getPreviousResults().isEmpty()) {
-            sb.append("\n\nKết quả từ các agent đã chạy:\n");
+            sb.append("\n\nKết quả agent trước:\n");
             for (AgentResult prev : context.getPreviousResults()) {
                 if (prev.isSuccess()) {
-                    sb.append("── ").append(prev.getDomain()).append(":\n");
-                    sb.append(prev.getAnswer()).append("\n");
+                    sb.append("── ").append(prev.getDomain()).append(":\n")
+                            .append(prev.getAnswer()).append("\n");
                 }
             }
         }
         return sb.toString();
     }
 
-    private String extractToolName(String llmOutput) {
-        try {
-            String actionLine = llmOutput.lines()
+    private String extractToolName(String output) {
+        return output.lines()
                 .filter(l -> l.trim().startsWith("Action:"))
-                .findFirst().orElse("");
-            return actionLine.replace("Action:", "").trim();
-        } catch (Exception e) {
-            return "unknown";
-        }
+                .findFirst()
+                .map(l -> l.replace("Action:", "").trim())
+                .orElse("unknown");
     }
 
-    private JsonNode extractToolArgs(String llmOutput) {
+    private JsonNode extractToolArgs(String output, Integer userId) {
         try {
-            String inputLine = llmOutput.lines()
-                .filter(l -> l.trim().startsWith("Action Input:"))
-                .findFirst().orElse("");
-            String json = inputLine.replace("Action Input:", "").trim();
-            return objectMapper.readTree(json);
+            String raw = output.lines()
+                    .filter(l -> l.trim().startsWith("Action Input:"))
+                    .findFirst()
+                    .map(l -> l.replace("Action Input:", "").trim())
+                    .orElse("{}");
+
+            // Gemini đôi khi wrap trong ```json ... ```
+            raw = raw.replaceAll("```json\\s*", "").replaceAll("```", "").trim();
+
+            JsonNode node = objectMapper.readTree(raw);
+
+            // Tự inject userId nếu LLM quên
+            if (node.isObject() && !node.has("userId")) {
+                ((ObjectNode) node).put("userId", userId);
+            }
+            return node;
         } catch (Exception e) {
-            log.warn("Không parse được Action Input, dùng empty node");
-            return objectMapper.createObjectNode();
+            log.warn("{} parse Action Input failed, fallback userId={}", getAgentId(), userId);
+            ObjectNode fallback = objectMapper.createObjectNode();
+            fallback.put("userId", userId);
+            return fallback;
         }
     }
 
@@ -161,7 +166,7 @@ public abstract class BaseReActAgent {
         try {
             return objectMapper.writeValueAsString(obj);
         } catch (Exception e) {
-            return "{\"error\": \"Serialization failed\"}";
+            return "{\"error\":\"Serialization failed\"}";
         }
     }
 }
