@@ -32,8 +32,8 @@ server:
 
 # ── Google Gemini ────────────────────────────────────
 gemini:
-  api-key: AIzaSyBxQkP1CqVG2huTIUQeKfTW3ivSU8B3TB0          # Lấy tại: https://aistudio.google.com/app/apikey
-  model: gemini-3-flash-preview             # Hoặc: gemini-1.5-pro (thông minh hơn, chậm hơn)
+  api-key: AIzaSyDyQnMXJK2JzVqCm95CycXWpJzpRj8iBoU          # Lấy tại: https://aistudio.google.com/app/apikey
+  model: gemini-3.1-flash-lite-preview             # Hoặc: gemini-3.1-flash-lite-preview (thông minh hơn, chậm hơn)
 
 # ── Agent Configuration ─────────────────────────────
 agent:

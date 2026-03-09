@@ -30,8 +30,8 @@ public class TnHoSo {
     @Column(name = "NOI_DUNG", length = 4000)
     private String noiDung;
 
-    @Column(name = "NGAY_TIEP_NHAN")
-    private LocalDateTime ngayTiepNhan;
+    @Column(name = "CREATED_DATE")
+    private LocalDateTime createdDate;
 
     /**
      * 0 = Mới/Chờ phân công
@@ -42,8 +42,8 @@ public class TnHoSo {
     @Column(name = "STATUS")
     private Integer status;
 
-    @Column(name = "NGUOI_TIEP_NHAN_ID")
-    private Integer nguoiTiepNhanId;
+    @Column(name = "CURRENT_USER_ID")
+    private Integer userId;
 
     @Column(name = "NGUOI_TIEP_NHAN_TEN", length = 255)
     private String nguoiTiepNhanTen;

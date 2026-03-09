@@ -37,61 +37,63 @@ public class OrchestratorAgent {
     private int parallelTimeoutSec;
 
     private static final String ORCHESTRATOR_PROMPT = """
-        Bạn là Orchestrator điều phối hệ thống AI xử lý nghiệp vụ KNTC.
-        
-        === AGENTS CÓ SẴN ===
-        - HO_SO_AGENT    : hồ sơ giải quyết KNTC (GQ_HOSO), đơn thư tiếp nhận (TN_HOSO)
-        - LICH_AGENT     : lịch họp, lịch làm việc
-        - THONG_KE_AGENT : thống kê, báo cáo, số liệu
-        - THONG_BAO_AGENT: thông báo hệ thống, nhắc nhở
-        
-        === NHIỆM VỤ ===
-        Phân tích câu hỏi và trả về JSON hợp lệ (không markdown, không giải thích):
-        {
-            "understanding": "Tóm tắt bạn hiểu câu hỏi là gì",
-            "tasks": [
-                {
-                    "agentId": "HO_SO_AGENT",
-                    "task": "Mô tả nhiệm vụ cụ thể bằng tiếng Việt",
-                    "canParallel": true,
-                    "dependsOn": [],
-                    "priority": 1
-                }
-            ],
-            "synthesisInstruction": "Hướng dẫn cách tổng hợp câu trả lời cuối"
-        }
-        
-        === QUY TẮC ROUTING ===
-        Câu hỏi 1 domain → 1 task
-        "hồ sơ gấp/quá hạn"     → HO_SO_AGENT
-        "lịch họp/làm việc"      → LICH_AGENT
-        "thống kê/báo cáo"       → THONG_KE_AGENT
-        "thông báo/nhắc nhở"     → THONG_BAO_AGENT
-        
-        Câu hỏi đa domain → nhiều tasks, canParallel=true
-        "hôm nay có gì"          → HO_SO + LICH + THONG_BAO (song song)
-        "tóm tắt công việc"      → HO_SO + LICH + THONG_BAO (song song)
-        
-        Câu hỏi phụ thuộc → dependsOn
-        "thống kê rồi nhắc nhở"  → THONG_KE trước, THONG_BAO dependsOn THONG_KE
-        
-        === LƯU Ý ===
-        - Chỉ dùng đúng agentId đã liệt kê ở trên
-        - task phải mô tả cụ thể, kèm userId nếu biết
-        - synthesisInstruction hướng dẫn cách trình bày kết quả cuối
-        - Trả về JSON thuần túy, KHÔNG bọc trong ```json``` hay bất kỳ markdown nào
-        """;
+            Bạn là Orchestrator điều phối hệ thống AI xử lý nghiệp vụ KNTC.
+
+            === AGENTS CÓ SẴN ===
+            - HO_SO_AGENT    : hồ sơ giải quyết KNTC (GQ_HOSO), đơn thư tiếp nhận (TN_HOSO)
+            - LICH_AGENT     : lịch họp, lịch làm việc
+            - THONG_KE_AGENT : thống kê, báo cáo, số liệu
+            - THONG_BAO_AGENT: thông báo hệ thống, nhắc nhở
+            - QUY_TRINH_AGENT: tạo quy trình mới, thiết kế workflow, Onboard nhân sự, mua sắm...
+
+            === NHIỆM VỤ ===
+            Phân tích câu hỏi và trả về JSON hợp lệ (không markdown, không giải thích):
+            {
+                "understanding": "Tóm tắt bạn hiểu câu hỏi là gì",
+                "tasks": [
+                    {
+                        "agentId": "HO_SO_AGENT",
+                        "task": "Mô tả nhiệm vụ cụ thể bằng tiếng Việt",
+                        "canParallel": true,
+                        "dependsOn": [],
+                        "priority": 1
+                    }
+                ],
+                "synthesisInstruction": "Hướng dẫn cách tổng hợp câu trả lời cuối"
+            }
+
+            === QUY TẮC ROUTING ===
+            Câu hỏi 1 domain → 1 task
+            "hồ sơ gấp/quá hạn"     → HO_SO_AGENT
+            "lịch họp/làm việc"      → LICH_AGENT
+            "thống kê/báo cáo"       → THONG_KE_AGENT
+            "thông báo/nhắc nhở"     → THONG_BAO_AGENT
+            "tạo quy trình/vẽ luồng" → QUY_TRINH_AGENT
+
+            Câu hỏi đa domain → nhiều tasks, canParallel=true
+            "hôm nay có gì"          → HO_SO + LICH + THONG_BAO (song song)
+            "tóm tắt công việc"      → HO_SO + LICH + THONG_BAO (song song)
+
+            Câu hỏi phụ thuộc → dependsOn
+            "thống kê rồi nhắc nhở"  → THONG_KE trước, THONG_BAO dependsOn THONG_KE
+
+            === LƯU Ý ===
+            - Chỉ dùng đúng agentId đã liệt kê ở trên
+            - task phải mô tả cụ thể, kèm userId nếu biết
+            - synthesisInstruction hướng dẫn cách trình bày kết quả cuối
+            - Trả về JSON thuần túy, KHÔNG bọc trong ```json``` hay bất kỳ markdown nào
+            """;
 
     // ✅ Thay ChatClient → GeminiClient trong constructor
     public OrchestratorAgent(GeminiClient geminiClient,
-                             ObjectMapper objectMapper,
-                             List<BaseReActAgent> agents,
-                             SynthesisAgent synthesisAgent) {
-        this.geminiClient   = geminiClient;
-        this.objectMapper   = objectMapper;
+            ObjectMapper objectMapper,
+            List<BaseReActAgent> agents,
+            SynthesisAgent synthesisAgent) {
+        this.geminiClient = geminiClient;
+        this.objectMapper = objectMapper;
         this.synthesisAgent = synthesisAgent;
         // Tự động đăng ký tất cả agents vào registry
-        this.agentRegistry  = agents.stream()
+        this.agentRegistry = agents.stream()
                 .collect(Collectors.toMap(BaseReActAgent::getAgentId, a -> a));
         log.info("AgentRegistry: {}", agentRegistry.keySet());
     }
@@ -114,8 +116,7 @@ public class OrchestratorAgent {
 
         // Bước 3: Tổng hợp
         String finalAnswer = synthesisAgent.synthesize(
-                query, results, plan.getSynthesisInstruction()
-        );
+                query, results, plan.getSynthesisInstruction());
 
         log.info("══════════════════════════════════════");
         log.info("ORCHESTRATOR hoàn thành | {} kết quả", results.size());
@@ -131,9 +132,7 @@ public class OrchestratorAgent {
                     List.of(ChatMessage.user(
                             "userId: " + userId + "\n" +
                                     "Thời gian: " + LocalDateTime.now() + "\n" +
-                                    "Câu hỏi: " + query
-                    ))
-            );
+                                    "Câu hỏi: " + query)));
 
             // Làm sạch JSON (Gemini đôi khi vẫn wrap trong ```json```)
             String json = llmResponse.trim()
@@ -156,16 +155,14 @@ public class OrchestratorAgent {
 
         Map<String, AgentResult> resultMap = new LinkedHashMap<>();
 
-        List<List<OrchestrationPlan.AgentTask>> waves =
-                topologicalSort(plan.getTasks());
+        List<List<OrchestrationPlan.AgentTask>> waves = topologicalSort(plan.getTasks());
 
         for (int i = 0; i < waves.size(); i++) {
             List<OrchestrationPlan.AgentTask> wave = waves.get(i);
             log.info("Wave {}/{}: agents={}", i + 1, waves.size(),
                     wave.stream().map(OrchestrationPlan.AgentTask::getAgentId).toList());
 
-            List<AgentResult> waveResults =
-                    executeWave(wave, userId, userName, resultMap);
+            List<AgentResult> waveResults = executeWave(wave, userId, userName, resultMap);
             waveResults.forEach(r -> resultMap.put(r.getAgentId(), r));
         }
 
@@ -185,10 +182,8 @@ public class OrchestratorAgent {
         // Nhiều tasks → chạy song song
         ExecutorService executor = Executors.newFixedThreadPool(wave.size());
         List<Future<AgentResult>> futures = wave.stream()
-                .map(task -> executor.submit(() ->
-                        runTask(task, userId, userName,
-                                new ArrayList<>(previousResultMap.values()))
-                ))
+                .map(task -> executor.submit(() -> runTask(task, userId, userName,
+                        new ArrayList<>(previousResultMap.values()))))
                 .toList();
 
         List<AgentResult> results = new ArrayList<>();
@@ -208,8 +203,8 @@ public class OrchestratorAgent {
     }
 
     private AgentResult runTask(OrchestrationPlan.AgentTask task,
-                                Integer userId, String userName,
-                                List<AgentResult> previousResults) {
+            Integer userId, String userName,
+            List<AgentResult> previousResults) {
         BaseReActAgent agent = agentRegistry.get(task.getAgentId());
         if (agent == null) {
             log.error("Agent không tồn tại: {}", task.getAgentId());
@@ -266,8 +261,7 @@ public class OrchestratorAgent {
                                 .canParallel(true)
                                 .dependsOn(new ArrayList<>())
                                 .priority(1)
-                                .build()
-                ))
+                                .build()))
                 .synthesisInstruction("Trả lời trực tiếp câu hỏi về hồ sơ")
                 .build();
     }
