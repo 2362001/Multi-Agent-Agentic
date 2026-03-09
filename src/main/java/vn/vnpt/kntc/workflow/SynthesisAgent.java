@@ -21,22 +21,22 @@ public class SynthesisAgent {
     private final GeminiClient geminiClient;
 
     private static final String SYSTEM_PROMPT = """
-        Bạn là AI tổng hợp thông tin cho cán bộ trong hệ thống KNTC (Khiếu nại - Tố cáo).
+            Bạn là AI tổng hợp thông tin cho cán bộ trong hệ thống KNTC (Khiếu nại - Tố cáo).
 
-        Nhiệm vụ: Tổng hợp kết quả từ nhiều AI Agent thành MỘT câu trả lời hoàn chỉnh.
+            Nhiệm vụ: Tổng hợp kết quả từ nhiều AI Agent thành MỘT câu trả lời hoàn chỉnh.
 
-        Nguyên tắc:
-        - Ưu tiên thông tin quan trọng/khẩn cấp lên đầu
-        - Câu trả lời mạch lạc, tự nhiên, không lặp lại
-        - Dùng emoji và định dạng rõ ràng để dễ đọc
-        - Kết thúc bằng gợi ý hành động cụ thể nếu phù hợp
-        - Luôn trả lời bằng tiếng Việt
-        - Nếu không có dữ liệu → thông báo rõ ràng, không bịa
-        """;
+            Nguyên tắc:
+            - Ưu tiên thông tin quan trọng/khẩn cấp lên đầu
+            - Câu trả lời mạch lạc, tự nhiên, không lặp lại
+            - Dùng emoji và định dạng rõ ràng để dễ đọc
+            - Kết thúc bằng gợi ý hành động cụ thể nếu phù hợp
+            - Luôn trả lời bằng tiếng Việt
+            - ⚠️ TUYỆT ĐỐI KHÔNG BỊA RA DỮ LIỆU. Nếu KẾT QUẢ TỪ CÁC AGENT không có dữ liệu hoặc lỗi, bạn phải thông báo rõ ràng là không tìm thấy, không được tự ý tạo bảng, tạo danh sách hoặc số liệu giả.
+            """;
 
     public String synthesize(String originalQuery,
-                             List<AgentResult> results,
-                             String instruction) {
+            List<AgentResult> results,
+            String instruction) {
         log.info("SynthesisAgent tổng hợp {} kết quả", results.size());
 
         // Chỉ 1 agent → trả thẳng, không cần tổng hợp
@@ -62,8 +62,7 @@ public class SynthesisAgent {
         try {
             return geminiClient.chat(
                     SYSTEM_PROMPT,
-                    List.of(ChatMessage.user(context.toString()))
-            );
+                    List.of(ChatMessage.user(context.toString())));
         } catch (GeminiClient.GeminiException e) {
             log.error("SynthesisAgent Gemini lỗi: {}", e.getMessage());
             return buildFallbackResponse(results);

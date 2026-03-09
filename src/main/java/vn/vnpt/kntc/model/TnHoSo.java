@@ -57,9 +57,6 @@ public class TnHoSo {
     @Column(name = "DIA_BAN_NOI_DUNG_CT", length = 500)
     private String diaChiNguoiKy;
 
-    @Column(name = "NGAY_TAO")
-    private LocalDateTime ngayTao;
-
     @Column(name = "LAST_MODIFIED_DATE")
     private LocalDateTime ngayCapNhat;
 }

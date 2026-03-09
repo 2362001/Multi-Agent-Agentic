@@ -16,10 +16,10 @@ import java.util.List;
  * ReAct loop: Thought → Action → Observation → Thought → ... → Final Answer
  *
  * Subclass chỉ cần implement:
- *   - getAgentId()
- *   - getDomain()
- *   - buildSystemPrompt()
- *   - executeTool(toolName, args)
+ * - getAgentId()
+ * - getDomain()
+ * - buildSystemPrompt()
+ * - executeTool(toolName, args)
  */
 @Slf4j
 public abstract class BaseReActAgent {
@@ -36,8 +36,11 @@ public abstract class BaseReActAgent {
 
     // ── Abstract methods — subclass bắt buộc implement ───────────
     public abstract String getAgentId();
+
     public abstract String getDomain();
+
     protected abstract String buildSystemPrompt();
+
     protected abstract String executeTool(String toolName, JsonNode args);
 
     /**
@@ -51,7 +54,7 @@ public abstract class BaseReActAgent {
         messages.add(ChatMessage.user(buildUserMessage(task, context)));
 
         List<String> thoughtProcess = new ArrayList<>();
-        List<String> toolsUsed     = new ArrayList<>();
+        List<String> toolsUsed = new ArrayList<>();
 
         for (int step = 1; step <= MAX_STEPS; step++) {
             log.debug("{} step {}/{}", getAgentId(), step, MAX_STEPS);
@@ -70,7 +73,7 @@ public abstract class BaseReActAgent {
 
             // LLM muốn gọi tool
             if (llmOutput.contains("Action:")) {
-                String toolName   = extractToolName(llmOutput);
+                String toolName = extractToolName(llmOutput);
                 JsonNode toolArgs = extractToolArgs(llmOutput, context.getUserId());
 
                 log.info("{} → tool: {} args: {}", getAgentId(), toolName, toolArgs);
@@ -85,7 +88,8 @@ public abstract class BaseReActAgent {
         }
 
         log.warn("⚠ {} exceeded MAX_STEPS={}", getAgentId(), MAX_STEPS);
-        return AgentResult.failed(getAgentId(), getDomain(), "Vượt quá " + MAX_STEPS + " bước");
+        return AgentResult.failed(getAgentId(), getDomain(),
+                "Hệ thống cần thêm thông tin để tra cứu chính xác. Hãy thử đưa ra câu hỏi cụ thể hơn cho tôi nhé.");
     }
 
     // ─────────────────────────────────────────────────────────────

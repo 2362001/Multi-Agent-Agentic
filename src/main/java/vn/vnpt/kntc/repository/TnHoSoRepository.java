@@ -1,5 +1,6 @@
 package vn.vnpt.kntc.repository;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,21 +22,23 @@ public interface TnHoSoRepository extends JpaRepository<TnHoSo, Integer> {
   List<TnHoSo> findPendingByUser(@Param("userId") Integer userId);
 
   // Đếm đơn thư tiếp nhận hôm nay
-  @Query(value = """
-          SELECT COUNT(*) FROM TN_HOSO
-          WHERE CURRENT_USER_ID = :userId
-            AND TRUNC(CREATED_DATE) = TRUNC(CURRENT_TIMESTAMP)
-      """, nativeQuery = true)
-  long countToday(@Param("userId") Integer userId);
+  @Cacheable(value = "countTnToday", key = "#userId")
+  @Query("""
+          SELECT COUNT(t) FROM TnHoSo t
+          WHERE t.userId = :userId
+            AND t.createdDate >= CURRENT_DATE
+      """)
+  Object countToday(@Param("userId") Integer userId);
 
   // Thống kê đơn thư theo tháng
-  @Query(value = """
-          SELECT COUNT(*) FROM TN_HOSO
-          WHERE CURRENT_USER_ID = :userId
-            AND EXTRACT(MONTH FROM CREATED_DATE) = :month
-            AND EXTRACT(YEAR  FROM CREATED_DATE) = :year
-      """, nativeQuery = true)
-  long countByMonth(
+  @Cacheable(value = "countTnByMonth", key = "#userId + '-' + #month + '-' + #year")
+  @Query("""
+          SELECT COUNT(t) FROM TnHoSo t
+          WHERE t.userId = :userId
+            AND YEAR(t.createdDate) = :year
+            AND MONTH(t.createdDate) = :month
+      """)
+  Object countByMonth(
       @Param("userId") Integer userId,
       @Param("month") int month,
       @Param("year") int year);
@@ -64,4 +67,15 @@ public interface TnHoSoRepository extends JpaRepository<TnHoSo, Integer> {
   List<TnHoSo> searchByKeyword(
       @Param("userId") Integer userId,
       @Param("kw") String keyword);
+
+  // Thống kê đơn thư theo năm
+  @Cacheable(value = "countTnByYear", key = "#userId + '-' + #year")
+  @Query("""
+          SELECT COUNT(t) FROM TnHoSo t
+          WHERE t.userId = :userId
+            AND YEAR(t.createdDate) = :year
+      """)
+  Object countByYear(
+      @Param("userId") Integer userId,
+      @Param("year") int year);
 }

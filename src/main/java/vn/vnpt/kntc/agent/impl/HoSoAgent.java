@@ -3,7 +3,6 @@ package vn.vnpt.kntc.agent.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.ChatClient;
 import org.springframework.stereotype.Component;
 import vn.vnpt.kntc.agent.base.BaseReActAgent;
 import vn.vnpt.kntc.config.GeminiClient;
@@ -11,6 +10,7 @@ import vn.vnpt.kntc.repository.GqHoSoRepository;
 import vn.vnpt.kntc.repository.TnHoSoRepository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * HoSoAgent — Chuyên xử lý câu hỏi về hồ sơ KNTC.
@@ -80,17 +80,24 @@ public class HoSoAgent extends BaseReActAgent {
                    Mục đích: Hồ sơ cần thành lập tổ xác minh
                    Dùng khi: hỏi về tổ xác minh
 
-                9. tn_find_pending(userId)
-                   Mục đích: Đơn thư TN chờ phân công xử lý
-                   Dùng khi: "đơn thư chờ xử lý", "đơn chưa phân công"
+                9. gq_find_last_received(userId)
+                   Mục đích: Lấy ra hồ sơ duy nhất vừa được phân công GẦN ĐÂY NHẤT.
+                   Dùng khi: "hồ sơ mới nhất", "hồ sơ cuối cùng", "hồ sơ vừa nhận"
 
-                10. tn_count_today(userId)
+                10. tn_find_pending(userId)
+                    Mục đích: Đơn thư TN chờ phân công xử lý
+                    Dùng khi: "đơn thư chờ xử lý", "đơn chưa phân công"
+
+                11. tn_count_today(userId)
                     Mục đích: Số đơn thư TN tiếp nhận hôm nay
                     Dùng khi: "hôm nay tiếp nhận bao nhiêu đơn"
 
                 === QUY TẮC PHẢN HỒI ===
-                - Nếu tìm thấy DANH SÁCH hồ sơ, bạn PHẢI trả về JSON bọc trong thẻ <HOSO_JSON> kèm theo câu trả lời tóm tắt ngắn gọn bên ngoài.
-                - Định dạng JSON cho hồ sơ:
+                - Dựa VÀO ĐÚNG kết quả (Observation) trả về từ tools. ⚠️ TUYỆT ĐỐI KHÔNG ĐƯỢC BỊA DỮ LIỆU hoặc tự tạo mã hồ sơ giả.
+                - Nếu tool trả về mảng rỗng [] hoặc null, bạn chỉ cần trả lời "Hiện tại tôi không tìm thấy hồ sơ nào" và KHÔNG trả về thẻ <HOSO_JSON>.
+                - NẾU kết quả trả về từ tool CHỈ LÀ CON SỐ (ví dụ từ `gq_count`), bận CHỈ trả lời con số đo, TUYỆT ĐỐI KHÔNG cố gắng tạo thẻ <HOSO_JSON> vì bạn không có dữ liệu chi tiết danh sách.
+                - Nếu tìm thấy DANH SÁCH hồ sơ THỰC TẾ từ tool, bạn PHẢI trả về JSON bọc trong thẻ <HOSO_JSON> kèm theo câu trả lời tóm tắt ngắn gọn bên ngoài. Lấy dữ liệu CHÍNH XÁC TỪ KẾT QUẢ TOOL, tuyệt đối không bịa thêm thắt text (như "Khiếu nại bồi thường...").
+                - Định dạng JSON cho hồ sơ phải lấy y hệt thuộc tính từ Observation:
                 [
                   {
                     "id": "1",
@@ -135,10 +142,10 @@ public class HoSoAgent extends BaseReActAgent {
             case "gq_count" -> {
                 String filter = args.path("filter").asText("all");
                 long count = switch (filter) {
-                    case "pending" -> gqRepo.countPending(userId);
-                    case "overdue" -> gqRepo.countOverdue(userId);
-                    case "today" -> gqRepo.countAssignedToday(userId);
-                    default -> gqRepo.countAll(userId);
+                    case "pending" -> ((Number) gqRepo.countPending(userId)).longValue();
+                    case "overdue" -> ((Number) gqRepo.countOverdue(userId)).longValue();
+                    case "today" -> ((Number) gqRepo.countAssignedToday(userId)).longValue();
+                    default -> ((Number) gqRepo.countAll(userId)).longValue();
                 };
                 yield "{\"count\":" + count + ", \"filter\":\"" + filter + "\"}";
             }
@@ -150,9 +157,14 @@ public class HoSoAgent extends BaseReActAgent {
 
             case "gq_find_need_xac_minh" -> toJson(gqRepo.findNeedToXacMinh(userId));
 
+            case "gq_find_last_received" -> {
+                var list = gqRepo.findLastReceived(userId);
+                yield list.isEmpty() ? "[]" : toJson(List.of(list.get(0)));
+            }
+
             case "tn_find_pending" -> toJson(tnRepo.findPendingByUser(userId));
 
-            case "tn_count_today" -> "{\"count\":" + tnRepo.countToday(userId) + "}";
+            case "tn_count_today" -> "{\"count\":" + ((Number) tnRepo.countToday(userId)).longValue() + "}";
 
             default -> "{\"error\": \"Tool không tồn tại: " + toolName + "\"}";
         };

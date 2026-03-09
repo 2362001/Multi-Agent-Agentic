@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 
 /**
  * OrchestratorAgent — Bộ não điều phối toàn bộ Multi-Agent system.
- *
+ * <p>
  * Trách nhiệm:
  * 1. Phân tích câu hỏi → lên kế hoạch (agent nào, thứ tự nào)
  * 2. Thực thi song song hoặc tuần tự theo dependency
@@ -61,6 +61,9 @@ public class OrchestratorAgent {
             }
 
             === QUY TẮC ROUTING ===
+            MỌI câu hỏi KHÔNG liên quan đến chuyên môn hệ thống (ví dụ: giao tiếp, câu hỏi linh tinh, chào hỏi, "hello", "nam mô a di đà phật", thời tiết, vv) → TRẢ VỀ tasks là mảng rỗng `[]`:
+            "chào AI", "hello"     → [] (tasks rỗng), synthesis sẽ đưa ra phản hồi giao tiếp.
+
             Câu hỏi 1 domain → 1 task
             "hồ sơ gấp/quá hạn"     → HO_SO_AGENT
             "thống kê/báo cáo"       → THONG_KE_AGENT
@@ -71,6 +74,7 @@ public class OrchestratorAgent {
             "tóm tắt công việc"      → HO_SO + THONG_KE (song song)
 
             === LƯU Ý ===
+            - NẾU câu hỏi KHÔNG liên quan hệ thống (chào hỏi), TRẢ VỀ "tasks": []
             - Chỉ dùng đúng agentId đã liệt kê ở trên
             - task phải mô tả cụ thể, kèm userId nếu biết
             - synthesisInstruction hướng dẫn cách trình bày kết quả cuối
@@ -127,11 +131,21 @@ public class OrchestratorAgent {
                                     "Thời gian: " + LocalDateTime.now() + "\n" +
                                     "Câu hỏi: " + query)));
 
-            // Làm sạch JSON (Gemini đôi khi vẫn wrap trong ```json```)
-            String json = llmResponse.trim()
-                    .replaceAll("```json\\s*", "")
-                    .replaceAll("```\\s*", "")
-                    .trim();
+            // Lọc cực đoan để lấy mảng JSON, bỏ qua text bên ngoài nếu LLM nói nhiều
+            String json = llmResponse.trim();
+            if (json.contains("```json")) {
+                int start = json.indexOf("```json") + 7;
+                int end = json.lastIndexOf("```");
+                if (start < end) {
+                    json = json.substring(start, end).trim();
+                }
+            } else if (json.contains("{") && json.contains("}")) {
+                int start = json.indexOf("{");
+                int end = json.lastIndexOf("}") + 1;
+                if (start < end) {
+                    json = json.substring(start, end).trim();
+                }
+            }
 
             return objectMapper.readValue(json, OrchestrationPlan.class);
 
@@ -246,16 +260,9 @@ public class OrchestratorAgent {
 
     private OrchestrationPlan fallbackPlan(String query) {
         return OrchestrationPlan.builder()
-                .understanding("Câu hỏi về hồ sơ KNTC")
-                .tasks(List.of(
-                        OrchestrationPlan.AgentTask.builder()
-                                .agentId("HO_SO_AGENT")
-                                .task(query)
-                                .canParallel(true)
-                                .dependsOn(new ArrayList<>())
-                                .priority(1)
-                                .build()))
-                .synthesisInstruction("Trả lời trực tiếp câu hỏi về hồ sơ")
+                .understanding("Không rõ ý định hoặc câu hỏi giao tiếp cơ bản")
+                .tasks(new ArrayList<>())
+                .synthesisInstruction("Hãy phản hồi thân thiện với người dùng dựa trên yêu cầu: " + query)
                 .build();
     }
 }

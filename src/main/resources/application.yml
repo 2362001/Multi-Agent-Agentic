@@ -11,6 +11,10 @@ spring:
       maximum-pool-size: 10
       minimum-idle: 2
 
+  redis:
+    host: localhost
+    port: 6379
+
   jpa:
     database-platform: org.hibernate.dialect.OracleDialect
     hibernate:
@@ -32,13 +36,13 @@ server:
 
 # ── Google Gemini ────────────────────────────────────
 gemini:
-  api-key: AIzaSyDyQnMXJK2JzVqCm95CycXWpJzpRj8iBoU          # Lấy tại: https://aistudio.google.com/app/apikey
-  model: gemini-3.1-flash-lite-preview             # Hoặc: gemini-3.1-flash-lite-preview (thông minh hơn, chậm hơn)
+  api-key: AIzaSyDyQnMXJK2JzVqCm95CycXWpJzpRj8iBoU # Lấy tại: https://aistudio.google.com/app/apikey
+  model: gemini-3.1-flash-lite-preview # Hoặc: gemini-3.1-flash-lite-preview (thông minh hơn, chậm hơn)
 
 # ── Agent Configuration ─────────────────────────────
 agent:
-  max-steps: 8               # Số bước tối đa mỗi ReAct loop
-  parallel-timeout-sec: 30   # Timeout cho parallel execution
+  max-steps: 8 # Số bước tối đa mỗi ReAct loop
+  parallel-timeout-sec: 30 # Timeout cho parallel execution
   urgency:
     deadline-hours: 24
     score-threshold: 40

@@ -25,10 +25,10 @@ public interface GqHoSoRepository extends JpaRepository<GqHoSo, Integer> {
   // ── Đếm hồ sơ được phân công hôm nay ────────────────────────
   @Query("""
           SELECT COUNT(h) FROM GqHoSo h
-          WHERE h.cbDuocPcId = :userId
+          WHERE h.currentUserId = :userId
             AND h.ngayPhanCong >= CURRENT_DATE
       """)
-  long countAssignedToday(@Param("userId") Integer userId);
+  Object countAssignedToday(@Param("userId") Integer userId);
 
   // ── Hồ sơ quá hạn GQKNTC ────────────────────────────────────
   @Query("""
@@ -78,14 +78,13 @@ public interface GqHoSoRepository extends JpaRepository<GqHoSo, Integer> {
           WHERE h.cbDuocPcId = :userId
             AND h.status NOT IN (3, 4)
       """)
-  long countAll(@Param("userId") Integer userId);
+  Object countAll(@Param("userId") Integer userId);
 
   @Query("""
           SELECT COUNT(h) FROM GqHoSo h
-          WHERE h.cbDuocPcId = :userId
-            AND h.status IN (0, 1)
+          WHERE h.currentUserId = :userId
       """)
-  long countPending(@Param("userId") Integer userId);
+  Object countPending(@Param("userId") Integer userId);
 
   @Query("""
           SELECT COUNT(h) FROM GqHoSo h
@@ -93,7 +92,7 @@ public interface GqHoSoRepository extends JpaRepository<GqHoSo, Integer> {
             AND h.ngayPheDuyetGqkntc < CURRENT_TIMESTAMP
             AND h.status NOT IN (3, 4)
       """)
-  long countOverdue(@Param("userId") Integer userId);
+  Object countOverdue(@Param("userId") Integer userId);
 
   // ── Thống kê theo trạng thái ──────────────────────────────────
   @Query("""
@@ -104,13 +103,13 @@ public interface GqHoSoRepository extends JpaRepository<GqHoSo, Integer> {
   List<Object[]> countGroupByStatus(@Param("userId") Integer userId);
 
   // ── Thống kê theo tháng ───────────────────────────────────────
-  @Query(value = """
-          SELECT COUNT(*) FROM GQ_HOSO
-          WHERE CB_DUOC_PC_ID = :userId
-            AND EXTRACT(MONTH FROM NGAY_PHAN_CONG) = :month
-            AND EXTRACT(YEAR FROM NGAY_PHAN_CONG) = :year
-      """, nativeQuery = true)
-  long countByMonth(
+  @Query("""
+          SELECT COUNT(h) FROM GqHoSo h
+          WHERE h.cbDuocPcId = :userId
+            AND YEAR(h.ngayPhanCong) = :year
+            AND MONTH(h.ngayPhanCong) = :month
+      """)
+  Object countByMonth(
       @Param("userId") Integer userId,
       @Param("month") int month,
       @Param("year") int year);
@@ -129,7 +128,7 @@ public interface GqHoSoRepository extends JpaRepository<GqHoSo, Integer> {
       @Param("userId") Integer userId,
       @Param("kw") String keyword);
 
-  // ── Hồ sơ cần thành lập tổ xác minh ──────────────────────────
+  // ── Hồ sơ cần thành lập tổ xác minh
   @Query("""
           SELECT h FROM GqHoSo h
           WHERE h.cbDuocPcId = :userId
@@ -137,4 +136,23 @@ public interface GqHoSoRepository extends JpaRepository<GqHoSo, Integer> {
             AND h.status NOT IN (3, 4)
       """)
   List<GqHoSo> findNeedToXacMinh(@Param("userId") Integer userId);
+
+  // ── Hồ sơ gần nhất vừa được phân công
+  @Query("""
+          SELECT h FROM GqHoSo h
+          WHERE h.cbDuocPcId = :userId
+          ORDER BY h.ngayPhanCong DESC
+          FETCH FIRST 1 ROWS ONLY
+      """)
+  List<GqHoSo> findLastReceived(@Param("userId") Integer userId);
+
+  // ── Thống kê theo năm ───────────────────────────────────────
+  @Query("""
+          SELECT COUNT(h) FROM GqHoSo h
+          WHERE h.cbDuocPcId = :userId
+            AND YEAR(h.ngayPhanCong) = :year
+      """)
+  Object countByYear(
+      @Param("userId") Integer userId,
+      @Param("year") int year);
 }
