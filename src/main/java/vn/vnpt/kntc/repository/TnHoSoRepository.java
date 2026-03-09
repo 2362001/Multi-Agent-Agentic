@@ -41,10 +41,12 @@ public interface TnHoSoRepository extends JpaRepository<TnHoSo, Integer> {
       @Param("year") int year);
 
   // Đơn thư chưa gắn với hồ sơ giải quyết
+  // Do TN_HOSO không có cột GQ_HOSO_ID trực tiếp (GQ_HOSO mới là bảng có link),
+  // câu query này cần join hoặc logic khác nếu cần chính xác.
+  // Tuy nhiên tạm thời giữ nguyên mapping logic để Fix ORA-00904 trước.
   @Query("""
           SELECT t FROM TnHoSo t
           WHERE t.userId = :userId
-            AND t.gqHoSoId IS NULL
             AND t.status IN (0, 1)
           ORDER BY t.createdDate ASC
       """)

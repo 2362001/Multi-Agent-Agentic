@@ -41,9 +41,7 @@ public class OrchestratorAgent {
 
             === AGENTS CÓ SẴN ===
             - HO_SO_AGENT    : hồ sơ giải quyết KNTC (GQ_HOSO), đơn thư tiếp nhận (TN_HOSO)
-            - LICH_AGENT     : lịch họp, lịch làm việc
             - THONG_KE_AGENT : thống kê, báo cáo, số liệu
-            - THONG_BAO_AGENT: thông báo hệ thống, nhắc nhở
             - QUY_TRINH_AGENT: tạo quy trình mới, thiết kế workflow, Onboard nhân sự, mua sắm...
 
             === NHIỆM VỤ ===
@@ -65,17 +63,12 @@ public class OrchestratorAgent {
             === QUY TẮC ROUTING ===
             Câu hỏi 1 domain → 1 task
             "hồ sơ gấp/quá hạn"     → HO_SO_AGENT
-            "lịch họp/làm việc"      → LICH_AGENT
             "thống kê/báo cáo"       → THONG_KE_AGENT
-            "thông báo/nhắc nhở"     → THONG_BAO_AGENT
             "tạo quy trình/vẽ luồng" → QUY_TRINH_AGENT
 
             Câu hỏi đa domain → nhiều tasks, canParallel=true
-            "hôm nay có gì"          → HO_SO + LICH + THONG_BAO (song song)
-            "tóm tắt công việc"      → HO_SO + LICH + THONG_BAO (song song)
-
-            Câu hỏi phụ thuộc → dependsOn
-            "thống kê rồi nhắc nhở"  → THONG_KE trước, THONG_BAO dependsOn THONG_KE
+            "hôm nay có gì"          → HO_SO + THONG_KE (song song)
+            "tóm tắt công việc"      → HO_SO + THONG_KE (song song)
 
             === LƯU Ý ===
             - Chỉ dùng đúng agentId đã liệt kê ở trên

@@ -24,10 +24,10 @@ public class TnHoSo {
     @Column(name = "MA_HO_SO", length = 100)
     private String maHoSo;
 
-    @Column(name = "TEN_NGUOI_KY", length = 255)
+    @Column(name = "DOI_TUONG_GUI", length = 255)
     private String tenNguoiKy;
 
-    @Column(name = "NOI_DUNG", length = 4000)
+    @Column(name = "TOM_TAT_NOI_DUNG", length = 4000)
     private String noiDung;
 
     @Column(name = "CREATED_DATE")
@@ -39,30 +39,27 @@ public class TnHoSo {
      * 2 = Đang xử lý
      * 3 = Hoàn thành
      */
-    @Column(name = "STATUS")
+    @Column(name = "HO_SO_STATUS")
     private Integer status;
 
     @Column(name = "CURRENT_USER_ID")
     private Integer userId;
 
-    @Column(name = "NGUOI_TIEP_NHAN_TEN", length = 255)
+    @Column(name = "NGUOI_TIEP_DAN_NAME", length = 255)
     private String nguoiTiepNhanTen;
 
-    @Column(name = "LOAI_DON_ID")
+    @Column(name = "LOAI_HO_SO")
     private Integer loaiDonId;
 
     @Column(name = "LOAI_DON_TEN", length = 255)
     private String loaiDonTen;
 
-    @Column(name = "DIA_CHI_NGUOI_KY", length = 500)
+    @Column(name = "DIA_BAN_NOI_DUNG_CT", length = 500)
     private String diaChiNguoiKy;
-
-    @Column(name = "GQ_HOSO_ID")
-    private Integer gqHoSoId;
 
     @Column(name = "NGAY_TAO")
     private LocalDateTime ngayTao;
 
-    @Column(name = "NGAY_CAP_NHAT")
+    @Column(name = "LAST_MODIFIED_DATE")
     private LocalDateTime ngayCapNhat;
 }

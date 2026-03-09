@@ -103,4 +103,7 @@ public class GqHoSo {
 
     @Column(name = "THANH_LAP_TO_XAC_MINH")
     private Integer thanhLapToXacMinh;
+
+    @Column(name = "CREATED_DATE")
+    private LocalDateTime createdDate;
 }
